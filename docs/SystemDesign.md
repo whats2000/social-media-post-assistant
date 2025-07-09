@@ -103,7 +103,7 @@ export interface GlobalSettings {
   includeHashtags: boolean;
   includeEmojis: boolean;
   includeCallToAction: boolean;
-  language: 'zh-TW' | 'en-US';
+  language: 'zh-TW' | 'en';
 }
 
 // 平台特定設定
@@ -418,15 +418,9 @@ d:\GitHub\social-media-post-assistant/
 ├── README.md
 │
 ├── docs/
-│   ├── SystemDesign.md
-│   ├── UserGuide.md
-│   └── DeveloperGuide.md
+│   └── SystemDesign.md
 │
 ├── public/
-│   ├── icons/
-│   │   ├── platforms/          # 平台圖標
-│   │   └── ui/                 # UI 圖標
-│   └── locales/                # 靜態翻譯資源
 │
 └── src/
     ├── middleware.ts           # next-intl 中間件
@@ -453,11 +447,13 @@ d:\GitHub\social-media-post-assistant/
     │   │   └── Layout/
     │   │
     │   └── providers/          # Context Providers
+    │       ├── index.tsx
     │       ├── ThemeProvider.tsx
     │       ├── LocaleProvider.tsx
     │       └── DraftStoreProvider.tsx
     │
     ├── hooks/
+    │   ├── index.ts            # hooks 工具導出
     │   ├── useApiKey.ts        # API Key 管理
     │   ├── useLocalStorage.ts  # localStorage 工具
     │   ├── useDraftStore.ts    # 草稿狀態管理
@@ -466,26 +462,31 @@ d:\GitHub\social-media-post-assistant/
     │
     ├── lib/
     │   ├── gemini/
+    │   │   ├── index.ts        # Gemini API 導出
     │   │   ├── client.ts       # Gemini API 客戶端
     │   │   ├── prompts.ts      # Prompt 模板
     │   │   └── types.ts        # API 類型定義
     │   ├── langchain/
-    │   │   ├── chains.ts       # LangChain 鏈
+    │   │   ├── nodes/          # LangGraph 節點
+    │   │   │   └── index.ts    # 節點導出
+    │   │   ├── index.ts        # LangGraph 工作流程導出
+    │   │   ├── state.ts        # LangGraph 狀態管理
     │   │   └── graph.ts        # LangGraph 工作流
     │   ├── storage/
+    │   │   ├── index.ts        # 儲存工具導出
     │   │   ├── encryption.ts   # 加密工具
     │   │   └── persistence.ts  # 持久化邏輯
     │   └── utils/
+    │       ├── index.ts        # 工具函數導出
     │       ├── validation.ts   # 驗證函數
     │       ├── export.ts       # 匯出工具
     │       └── formatting.ts   # 格式化工具
     │
     ├── i18n/
-    │   ├── config.ts           # i18n 配置
     │   ├── locales/
     │   │   ├── zh-TW.json
-    │   │   └── en-US.json
-    │   └── middleware.ts       # 語言中間件
+    │   │   └── en.json
+    │   └── index.ts            # i18n 導出
     │
     └── types/
         ├── index.ts            # 全域類型
