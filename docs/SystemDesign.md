@@ -17,7 +17,7 @@
 
 ## 系統概述 / System Overview
 
-使用者貼上原始內容 → 勾選平台 (X / LinkedIn / Instagram / Threads / Facebook) → **一次呼叫 Gemini 2.5 Flash 生成五張草稿卡** → 卡片內可用自然語言回饋並重新生成 → 匯出或複製。
+使用者貼上原始內容 → 勾選平台 (X / LinkedIn / Instagram / Threads / Facebook) → **一次呼叫 Gemini 2.5 Flash 生成一到五張草稿卡** → 卡片內可用自然語言回饋並重新生成 → 匯出或複製。
 所有邏輯與狀態存放在瀏覽器 (`localStorage`)；不涉及伺服器或資料庫。
 
 **核心價值主張：**
@@ -28,15 +28,16 @@
 
 ## 技術架構 / Technical Architecture
 
-| Layer        | 選用技術                                                                                       | 對應 `package.json`       | 版本要求     |
-|--------------|--------------------------------------------------------------------------------------------|-------------------------|----------|
-| **前端**       | **Next 15** (`next dev --turbopack`)<br>React 18 + **TypeScript 5**                        | `"next": "15.3.5"`      | >=15.0.0 |
-| **UI 組件**    | **Ant Design 5** (`antd` + `@ant-design/icons`)                                            | `"antd": "^5.26.4"`     | >=5.20.0 |
-| **樣式**       | **Tailwind CSS 4**（公用 layout spacing / color utilities）<br>AntD Token 變數串接 Tailwind config | `"tailwindcss": "^4"`   | >=4.0.0  |
-| **AI / LLM** | **LangChain Core 0.3.x** + **LangGraph 0.3.x**<br>模型：**Gemini 2.5 Flash** (REST API)<br>使用 `Annotation.Root` 定義狀態，`StateGraph` 建構工作流 | `@langchain/*` packages | >=0.3.0  |
-| **國際化**      | **next-intl 4**（資料夾 `/i18n`）                                                               | `"next-intl": "^4.3.4"` | >=4.0.0  |
-| **狀態 / 儲存**  | React `useState` + Context；**localStorage** 持久化（自訂 hook）                                   | 無額外 state lib           | -        |
-| **部署**       | Vercel 靜態站點 (SSG) 或任意靜態主機                                                                  | 不依賴 Node backend        | -        |
+| Layer        | 選用技術                                                                                                                                 | 對應 `package.json`         | 版本要求     |
+|--------------|--------------------------------------------------------------------------------------------------------------------------------------|---------------------------|----------|
+| **前端**       | **Next 15** (`next dev --turbopack`)<br>React 18 + **TypeScript 5**                                                                  | `"next": "15.3.5"`        | >=15.0.0 |
+| **UI 組件**    | **Ant Design 5** (`antd` + `@ant-design/icons`)                                                                                      | `"antd": "^5.26.4"`       | >=5.20.0 |
+| **樣式**       | **Tailwind CSS 4**（公用 layout spacing / color utilities）<br>AntD Token 變數串接 Tailwind config                                           | `"tailwindcss": "^4"`     | >=4.0.0  |
+| **AI / LLM** | **LangChain Core 0.3.x** + **LangGraph 0.3.x**<br>模型：**Gemini 2.5 Flash** (REST API)<br>使用 `Annotation.Root` 定義狀態，`StateGraph` 建構工作流 | `@langchain/*` packages   | >=0.3.0  |
+| **國際化**      | **next-intl 4**（資料夾 `/i18n`）                                                                                                         | `"next-intl": "^4.3.4"`   | >=4.0.0  |
+| **狀態 / 儲存**  | React `useState` + Context；**localStorage** 持久化（自訂 hook）                                                                             | 無額外 state lib             | -        |
+| **工具函數**     | **lodash-es**（debounce, throttle 等工具函數）                                                                                              | `"lodash-es": "^4.17.21"` | >=4.17.0 |
+| **部署**       | Vercel 靜態站點 (SSG) 或任意靜態主機                                                                                                            | 不依賴 Node backend          | -        |
 
 ## 功能需求 / Functional Requirements
 
@@ -167,7 +168,7 @@ graph TD
     end
     
     subgraph "AI Processing"
-      LC[LangChain Core<br/>Prompt Templates]
+      LC[LangChain Core<br/>Node Functions]
       LG[LangGraph<br/>Generation Workflow]
     end
   end
@@ -199,14 +200,22 @@ sequenceDiagram
 
   U->>App: 訪問網站
   App->>LS: 檢查 API Key
+  LS->>App: 回傳 API Key 狀態
   alt API Key 不存在
     App->>U: 顯示 API Key Modal
     U->>App: 輸入 API Key
     App->>API: 測試 API Key
     API->>App: 回傳驗證結果
-    App->>LS: 加密存儲 API Key
+    alt 驗證成功
+      App->>LS: 加密存儲 API Key
+      LS->>App: 確認存儲成功
+      App->>U: 關閉 Modal，顯示成功提示
+    else 驗證失敗
+      App->>U: 顯示錯誤訊息
+    end
   end
   App->>LS: 載入設定和草稿
+  LS->>App: 回傳設定和草稿資料
   App->>U: 顯示主介面
 ```
 
@@ -216,19 +225,46 @@ sequenceDiagram
   participant U as User
   participant App as Next.js App
   participant LG as LangGraph
+  participant N1 as generateX
+  participant N2 as generateLinkedIn
+  participant N3 as generateInstagram
+  participant N4 as generateThreads
+  participant N5 as generateFacebook
   participant API as Gemini API
 
   U->>App: 輸入原始內容
   U->>App: 選擇平台
   U->>App: 點擊 Generate
-  App->>LG: 創建生成工作流
+  App->>+LG: 創建生成工作流
   
-  loop 每個選中平台
-    LG->>API: 發送平台特定 Prompt
-    API->>LG: 回傳生成內容
+  par 並行執行各平台節點
+    LG->>+N1: 觸發 X 節點
+    N1->>+API: 發送 X 平台 Prompt
+    API-->>-N1: 回傳 X 內容
+    N1-->>-LG: X 內容結果
+  and
+    LG->>+N2: 觸發 LinkedIn 節點
+    N2->>+API: 發送 LinkedIn Prompt
+    API-->>-N2: 回傳 LinkedIn 內容
+    N2-->>-LG: LinkedIn 內容結果
+  and
+    LG->>+N3: 觸發 Instagram 節點
+    N3->>+API: 發送 Instagram Prompt
+    API-->>-N3: 回傳 Instagram 內容
+    N3-->>-LG: Instagram 內容結果
+  and
+    LG->>+N4: 觸發 Threads 節點
+    N4->>+API: 發送 Threads Prompt
+    API-->>-N4: 回傳 Threads 內容
+    N4-->>-LG: Threads 內容結果
+  and
+    LG->>+N5: 觸發 Facebook 節點
+    N5->>+API: 發送 Facebook Prompt
+    API-->>-N5: 回傳 Facebook 內容
+    N5-->>-LG: Facebook 內容結果
   end
   
-  LG->>App: 回傳所有平台草稿
+  LG-->>-App: 回傳所有平台草稿
   App->>U: 顯示草稿卡片
 ```
 
@@ -240,12 +276,12 @@ sequenceDiagram
   participant LG as LangGraph
   participant API as Gemini API
 
-  U->>Card: 輸入反饋訊息
-  Card->>LG: 創建優化工作流
-  LG->>API: 發送優化 Prompt
-  API->>LG: 回傳優化內容
-  LG->>Card: 更新草稿內容
-  Card->>U: 顯示更新結果
+  U->>+Card: 輸入反饋訊息
+  Card->>+LG: 創建優化工作流
+  LG->>+API: 發送優化 Prompt
+  API-->>-LG: 回傳優化內容
+  LG-->>-Card: 更新草稿內容
+  Card-->>-U: 顯示更新結果
 ```
 
 ## 前端介面設計 / Front-end Interface Design
@@ -463,21 +499,49 @@ d:\GitHub\social-media-post-assistant/
     │
     ├── lib/
     │   ├── gemini/
+    │   │   ├── __tests__/      # Jest 功能測試
+    │   │   │   └── client.test.ts
     │   │   ├── index.ts        # Gemini API 導出
     │   │   ├── client.ts       # Gemini API 客戶端
-    │   │   ├── prompts.ts      # Prompt 模板
     │   │   └── types.ts        # API 類型定義
     │   ├── langchain/
-    │   │   ├── nodes/          # LangGraph 節點
-    │   │   │   └── index.ts    # 節點導出
+    │   │   ├── __tests__/      # Jest 功能測試
+    │   │   │   ├── state.test.ts
+    │   │   │   └── graph.test.ts
+    │   │   ├── nodes/          # LangGraph 節點獨立檔案
+    │   │   │   ├── __tests__/  # 節點測試
+    │   │   │   │   ├── validateInput.test.ts
+    │   │   │   │   ├── generateX.test.ts
+    │   │   │   │   ├── generateLinkedIn.test.ts
+    │   │   │   │   ├── generateInstagram.test.ts
+    │   │   │   │   ├── generateThreads.test.ts
+    │   │   │   │   ├── generateFacebook.test.ts
+    │   │   │   │   ├── validateOutput.test.ts
+    │   │   │   │   └── formatResults.test.ts
+    │   │   │   ├── validateInput.ts    # 輸入驗證節點
+    │   │   │   ├── generateX.ts        # X平台生成節點 (含prompt)
+    │   │   │   ├── generateLinkedIn.ts # LinkedIn生成節點 (含prompt)
+    │   │   │   ├── generateInstagram.ts# Instagram生成節點 (含prompt)
+    │   │   │   ├── generateThreads.ts  # Threads生成節點 (含prompt)
+    │   │   │   ├── generateFacebook.ts # Facebook生成節點 (含prompt)
+    │   │   │   ├── validateOutput.ts   # 輸出驗證節點
+    │   │   │   ├── formatResults.ts    # 結果格式化節點
+    │   │   │   └── index.ts           # 節點導出
     │   │   ├── index.ts        # LangGraph 工作流程導出
     │   │   ├── state.ts        # LangGraph 狀態管理
     │   │   └── graph.ts        # LangGraph 工作流
     │   ├── storage/
+    │   │   ├── __tests__/      # Jest 功能測試
+    │   │   │   ├── encryption.test.ts
+    │   │   │   └── persistence.test.ts
     │   │   ├── index.ts        # 儲存工具導出
     │   │   ├── encryption.ts   # 加密工具
     │   │   └── persistence.ts  # 持久化邏輯
     │   └── utils/
+    │       ├── __tests__/      # Jest 功能測試
+    │       │   ├── validation.test.ts
+    │       │   ├── export.test.ts
+    │       │   └── formatting.test.ts
     │       ├── index.ts        # 工具函數導出
     │       ├── validation.ts   # 驗證函數
     │       ├── export.ts       # 匯出工具
@@ -503,6 +567,16 @@ d:\GitHub\social-media-post-assistant/
 ```typescript
 // lib/langchain/graph.ts
 import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
+import { 
+  validateInput,
+  generateXContent,
+  generateLinkedInContent,
+  generateInstagramContent,
+  generateThreadsContent,
+  generateFacebookContent,
+  validateOutput,
+  formatResults
+} from './nodes';
 
 // 使用 Annotation 定義狀態結構
 export const GenerationState = Annotation.Root({
@@ -519,153 +593,71 @@ export const GenerationState = Annotation.Root({
   }),
 });
 
-// 節點函數實現
-const validateInput = async (state: typeof GenerationState.State) => {
-  // 輸入驗證邏輯
-  return { errors: {} };
-};
-
-const generatePlatformContent = async (state: typeof GenerationState.State) => {
-  // 並行生成所有平台內容
-  const promises = state.platforms.map(async (platform) => {
-    try {
-      const content = await generateContentForPlatform(
-        state.originalContent,
-        platform,
-        state.globalSettings
-      );
-      return { platform, content };
-    } catch (error) {
-      console.error(`Failed to generate content for ${platform}:`, error);
-      return { platform, content: '', error: error.message };
-    }
-  });
-
-  // 等待所有平台完成
-  const results = await Promise.allSettled(promises);
-  
-  const drafts: Record<Platform, string> = {};
-  const errors: Record<Platform, string> = {};
-  
-  results.forEach((result, index) => {
-    const platform = state.platforms[index];
-    if (result.status === 'fulfilled') {
-      const { content, error } = result.value;
-      if (error) {
-        errors[platform] = error;
-      } else {
-        drafts[platform] = content;
-      }
-    } else {
-      errors[platform] = result.reason?.message || 'Unknown error';
-    }
-  });
-
-  return { drafts, errors };
-};
-
-const validateOutput = async (state: typeof GenerationState.State) => {
-  // 輸出驗證邏輯 - 檢查所有平台的內容
-  const validationErrors: Record<Platform, string> = {};
-  
-  Object.entries(state.drafts).forEach(([platform, content]) => {
-    // 檢查內容長度限制
-    const limits = {
-      [Platform.X]: 280,
-      [Platform.LINKEDIN]: 3000,
-      [Platform.INSTAGRAM]: 2200,
-      [Platform.THREADS]: 500,
-      [Platform.FACEBOOK]: 63206
-    };
-    
-    const limit = limits[platform as Platform];
-    if (content.length > limit) {
-      validationErrors[platform as Platform] = `Content exceeds ${limit} character limit`;
-    }
-    
-    // 檢查內容是否為空
-    if (!content.trim()) {
-      validationErrors[platform as Platform] = 'Content is empty';
-    }
-  });
-  
-  return { errors: { ...state.errors, ...validationErrors } };
-};
-
-const formatResults = async (state: typeof GenerationState.State) => {
-  // 格式化結果
-  return {};
-};
-
-// 工作流圖建構
+// 工作流圖建構 - 每個平台獨立節點
 export const contentGenerationGraph = new StateGraph(GenerationState)
   .addNode("validateInput", validateInput)
-  .addNode("generatePlatformContent", generatePlatformContent)
+  .addNode("generateX", generateXContent)
+  .addNode("generateLinkedIn", generateLinkedInContent)
+  .addNode("generateInstagram", generateInstagramContent)
+  .addNode("generateThreads", generateThreadsContent)
+  .addNode("generateFacebook", generateFacebookContent)
   .addNode("validateOutput", validateOutput)
   .addNode("formatResults", formatResults)
   .addEdge(START, "validateInput")
-  .addEdge("validateInput", "generatePlatformContent")
-  .addEdge("generatePlatformContent", "validateOutput")
+  .addEdge("validateInput", "generateX")
+  .addEdge("validateInput", "generateLinkedIn")
+  .addEdge("validateInput", "generateInstagram")
+  .addEdge("validateInput", "generateThreads")
+  .addEdge("validateInput", "generateFacebook")
+  .addEdge("generateX", "validateOutput")
+  .addEdge("generateLinkedIn", "validateOutput")
+  .addEdge("generateInstagram", "validateOutput")
+  .addEdge("generateThreads", "validateOutput")
+  .addEdge("generateFacebook", "validateOutput")
   .addEdge("validateOutput", "formatResults")
   .addEdge("formatResults", END)
   .compile();
 ```
 
-### 2. Prompt 模板系統
+### 2. 節點檔案結構範例
 
 ```typescript
-// lib/gemini/prompts.ts
-export const PLATFORM_PROMPTS = {
-  [Platform.X]: `
-    作為社群媒體專家，請將以下內容改寫為適合 X (原 Twitter) 的貼文：
+// lib/langchain/nodes/generateX.ts
+import { geminiClient } from '../../gemini/client';
+import { GenerationState } from '../state';
+import { Platform } from '../../../types';
 
-    原始內容：{originalContent}
-    
-    要求：
-    - 限制在 280 字符以內
-    - 語調：{tone}
-    - 長度：{length}
-    - 包含話題標籤：{includeHashtags}
-    - 包含表情符號：{includeEmojis}
-    
-    請直接回傳貼文內容，不要包含其他說明。
-  `,
+const X_PROMPT = `
+  作為社群媒體專家，請將以下內容改寫為適合 X (原 Twitter) 的貼文：
+  原始內容：{originalContent}
   
-  [Platform.LINKEDIN]: `
-    作為專業社群媒體專家，請將以下內容改寫為適合 LinkedIn 的專業貼文：
-    
-    原始內容：{originalContent}
-    
-    要求：
-    - 限制在 3000 字符以內
-    - 語調：{tone}
-    - 長度：{length}
-    - 包含專業話題標籤：{includeHashtags}
-    - 包含表情符號：{includeEmojis}
-    
-    請直接回傳貼文內容，不要包含其他說明。
-  `,
+  要求：
+  - 限制在 280 字符以內
+  - 語調：{tone}
+  - 長度：{length}
+  - 包含話題標籤：{includeHashtags}
+  - 包含表情符號：{includeEmojis}
   
-  // ... 更多平台特定 prompts
+  請直接回傳貼文內容，不要包含其他說明。
+`;
+
+export const generateXContent = async (state: typeof GenerationState.State) => {
+  if (!state.platforms.includes(Platform.X)) return {};
+  
+  try {
+    const prompt = X_PROMPT
+      .replace('{originalContent}', state.originalContent)
+      .replace('{tone}', state.globalSettings.tone)
+      .replace('{length}', state.globalSettings.length)
+      .replace('{includeHashtags}', state.globalSettings.includeHashtags.toString())
+      .replace('{includeEmojis}', state.globalSettings.includeEmojis.toString());
+      
+    const response = await geminiClient.generateContent(prompt);
+    return { drafts: { [Platform.X]: response.text() } };
+  } catch (error) {
+    return { errors: { [Platform.X]: error.message } };
+  }
 };
-
-// 生成函數實現
-async function generateContentForPlatform(
-  originalContent: string,
-  platform: Platform,
-  settings: GlobalSettings
-): Promise<string> {
-  const prompt = PLATFORM_PROMPTS[platform]
-    .replace('{originalContent}', originalContent)
-    .replace('{tone}', settings.tone)
-    .replace('{length}', settings.length)
-    .replace('{includeHashtags}', settings.includeHashtags.toString())
-    .replace('{includeEmojis}', settings.includeEmojis.toString());
-    
-  // 調用 Gemini API
-  const response = await geminiClient.generateContent(prompt);
-  return response.text();
-}
 ```
 
 ### 3. 錯誤處理策略
@@ -788,31 +780,21 @@ export class SecureStorage {
 graph TD
   subgraph "LangGraph 內容生成工作流"
     A[START] --> B[validateInput]
-    B --> C[generatePlatformContent]
     
-    subgraph "並行生成所有平台內容"
-      C1[X - Twitter 生成]
-      C2[LinkedIn 生成] 
-      C3[Instagram 生成]
-      C4[Threads 生成]
-      C5[Facebook 生成]
-    end
+    B --> C1[generateX]
+    B --> C2[generateLinkedIn]
+    B --> C3[generateInstagram]
+    B --> C4[generateThreads]
+    B --> C5[generateFacebook]
     
-    C --> C1
-    C --> C2
-    C --> C3
-    C --> C4
-    C --> C5
-    
-    C1 --> D[waitForAllPlatforms]
+    C1 --> D[validateOutput]
     C2 --> D
     C3 --> D
     C4 --> D
     C5 --> D
     
-    D --> E[validateOutput]
-    E --> F[formatResults]
-    F --> G[END]
+    D --> E[formatResults]
+    E --> F[END]
   end
 
   subgraph "反饋重新生成工作流"
