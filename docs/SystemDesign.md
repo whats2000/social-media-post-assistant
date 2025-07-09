@@ -33,7 +33,7 @@
 | **前端**       | **Next 15** (`next dev --turbopack`)<br>React 18 + **TypeScript 5**                        | `"next": "15.3.5"`      | >=15.0.0 |
 | **UI 組件**    | **Ant Design 5** (`antd` + `@ant-design/icons`)                                            | `"antd": "^5.26.4"`     | >=5.20.0 |
 | **樣式**       | **Tailwind CSS 4**（公用 layout spacing / color utilities）<br>AntD Token 變數串接 Tailwind config | `"tailwindcss": "^4"`   | >=4.0.0  |
-| **AI / LLM** | **LangChain Core 0.3.x** + **LangGraph 0.3.x**<br>模型：**Gemini 2.5 Flash** (REST API)       | `@langchain/*` packages | >=0.3.0  |
+| **AI / LLM** | **LangChain Core 0.3.x** + **LangGraph 0.3.x**<br>模型：**Gemini 2.5 Flash** (REST API)<br>使用 `Annotation.Root` 定義狀態，`StateGraph` 建構工作流 | `@langchain/*` packages | >=0.3.0  |
 | **國際化**      | **next-intl 4**（資料夾 `/i18n`）                                                               | `"next-intl": "^4.3.4"` | >=4.0.0  |
 | **狀態 / 儲存**  | React `useState` + Context；**localStorage** 持久化（自訂 hook）                                   | 無額外 state lib           | -        |
 | **部署**       | Vercel 靜態站點 (SSG) 或任意靜態主機                                                                  | 不依賴 Node backend        | -        |
@@ -75,7 +75,7 @@
 ```typescript
 // 平台枚舉
 export enum Platform {
-  TWITTER = 'twitter',
+  X = 'x', // 原 Twitter
   LINKEDIN = 'linkedin', 
   INSTAGRAM = 'instagram',
   THREADS = 'threads',
@@ -261,8 +261,9 @@ Desktop (>1200px):
 ├─────────────────────────────────────────────────────────┤
 │  DraftDeck (Horizontal Scroll, 5 cards)                 │
 │   ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌───  │
-│   │Twitter  │ │LinkedIn │ │Instagram│ │Threads  │ │Face │
-│   │Draft    │ │Draft    │ │Draft    │ │Draft    │ │...  │
+│   │X (原    │ │LinkedIn │ │Instagram│ │Threads  │ │Face │
+│   │Twitter) │ │Draft    │ │Draft    │ │Draft    │ │...  │
+│   │Draft    │ │         │ │         │ │         │ │     │
 │   └─────────┘ └─────────┘ └─────────┘ └─────────┘ └───  │
 └─────────────────────────────────────────┬─ ExportBar ───┘
                                           └─ FloatButton ──
@@ -501,25 +502,113 @@ d:\GitHub\social-media-post-assistant/
 
 ```typescript
 // lib/langchain/graph.ts
-import { StateGraph } from "@langchain/langgraph";
+import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 
-export interface GenerationState {
-  originalContent: string;
-  platforms: Platform[];
-  globalSettings: GlobalSettings;
-  drafts: Record<Platform, string>;
-  errors: Record<Platform, string>;
-}
-
-// 工作流節點:
-// 1. validateInput - 輸入驗證
-// 2. generatePlatformContent - 並行生成各平台內容  
-// 3. validateOutput - 輸出驗證
-// 4. formatResults - 格式化結果
-
-export const contentGenerationGraph = new StateGraph<GenerationState>({
-  // 節點實現...
+// 使用 Annotation 定義狀態結構
+export const GenerationState = Annotation.Root({
+  originalContent: Annotation<string>(),
+  platforms: Annotation<Platform[]>(),
+  globalSettings: Annotation<GlobalSettings>(),
+  drafts: Annotation<Record<Platform, string>>({
+    default: () => ({} as Record<Platform, string>),
+    reducer: (left, right) => ({ ...left, ...right })
+  }),
+  errors: Annotation<Record<Platform, string>>({
+    default: () => ({} as Record<Platform, string>),
+    reducer: (left, right) => ({ ...left, ...right })
+  }),
 });
+
+// 節點函數實現
+const validateInput = async (state: typeof GenerationState.State) => {
+  // 輸入驗證邏輯
+  return { errors: {} };
+};
+
+const generatePlatformContent = async (state: typeof GenerationState.State) => {
+  // 並行生成所有平台內容
+  const promises = state.platforms.map(async (platform) => {
+    try {
+      const content = await generateContentForPlatform(
+        state.originalContent,
+        platform,
+        state.globalSettings
+      );
+      return { platform, content };
+    } catch (error) {
+      console.error(`Failed to generate content for ${platform}:`, error);
+      return { platform, content: '', error: error.message };
+    }
+  });
+
+  // 等待所有平台完成
+  const results = await Promise.allSettled(promises);
+  
+  const drafts: Record<Platform, string> = {};
+  const errors: Record<Platform, string> = {};
+  
+  results.forEach((result, index) => {
+    const platform = state.platforms[index];
+    if (result.status === 'fulfilled') {
+      const { content, error } = result.value;
+      if (error) {
+        errors[platform] = error;
+      } else {
+        drafts[platform] = content;
+      }
+    } else {
+      errors[platform] = result.reason?.message || 'Unknown error';
+    }
+  });
+
+  return { drafts, errors };
+};
+
+const validateOutput = async (state: typeof GenerationState.State) => {
+  // 輸出驗證邏輯 - 檢查所有平台的內容
+  const validationErrors: Record<Platform, string> = {};
+  
+  Object.entries(state.drafts).forEach(([platform, content]) => {
+    // 檢查內容長度限制
+    const limits = {
+      [Platform.X]: 280,
+      [Platform.LINKEDIN]: 3000,
+      [Platform.INSTAGRAM]: 2200,
+      [Platform.THREADS]: 500,
+      [Platform.FACEBOOK]: 63206
+    };
+    
+    const limit = limits[platform as Platform];
+    if (content.length > limit) {
+      validationErrors[platform as Platform] = `Content exceeds ${limit} character limit`;
+    }
+    
+    // 檢查內容是否為空
+    if (!content.trim()) {
+      validationErrors[platform as Platform] = 'Content is empty';
+    }
+  });
+  
+  return { errors: { ...state.errors, ...validationErrors } };
+};
+
+const formatResults = async (state: typeof GenerationState.State) => {
+  // 格式化結果
+  return {};
+};
+
+// 工作流圖建構
+export const contentGenerationGraph = new StateGraph(GenerationState)
+  .addNode("validateInput", validateInput)
+  .addNode("generatePlatformContent", generatePlatformContent)
+  .addNode("validateOutput", validateOutput)
+  .addNode("formatResults", formatResults)
+  .addEdge(START, "validateInput")
+  .addEdge("validateInput", "generatePlatformContent")
+  .addEdge("generatePlatformContent", "validateOutput")
+  .addEdge("validateOutput", "formatResults")
+  .addEdge("formatResults", END)
+  .compile();
 ```
 
 ### 2. Prompt 模板系統
@@ -527,8 +616,8 @@ export const contentGenerationGraph = new StateGraph<GenerationState>({
 ```typescript
 // lib/gemini/prompts.ts
 export const PLATFORM_PROMPTS = {
-  [Platform.TWITTER]: `
-    作為社群媒體專家，請將以下內容改寫為適合 Twitter 的貼文：
+  [Platform.X]: `
+    作為社群媒體專家，請將以下內容改寫為適合 X (原 Twitter) 的貼文：
 
     原始內容：{originalContent}
     
@@ -544,9 +633,39 @@ export const PLATFORM_PROMPTS = {
   
   [Platform.LINKEDIN]: `
     作為專業社群媒體專家，請將以下內容改寫為適合 LinkedIn 的專業貼文：
-    // ... 更多平台特定 prompts
-  `
+    
+    原始內容：{originalContent}
+    
+    要求：
+    - 限制在 3000 字符以內
+    - 語調：{tone}
+    - 長度：{length}
+    - 包含專業話題標籤：{includeHashtags}
+    - 包含表情符號：{includeEmojis}
+    
+    請直接回傳貼文內容，不要包含其他說明。
+  `,
+  
+  // ... 更多平台特定 prompts
 };
+
+// 生成函數實現
+async function generateContentForPlatform(
+  originalContent: string,
+  platform: Platform,
+  settings: GlobalSettings
+): Promise<string> {
+  const prompt = PLATFORM_PROMPTS[platform]
+    .replace('{originalContent}', originalContent)
+    .replace('{tone}', settings.tone)
+    .replace('{length}', settings.length)
+    .replace('{includeHashtags}', settings.includeHashtags.toString())
+    .replace('{includeEmojis}', settings.includeEmojis.toString());
+    
+  // 調用 Gemini API
+  const response = await geminiClient.generateContent(prompt);
+  return response.text();
+}
 ```
 
 ### 3. 錯誤處理策略
@@ -582,6 +701,8 @@ import { useMemo, useCallback } from 'react';
 import { debounce } from 'lodash-es';
 
 export const useDraftStore = () => {
+  const [drafts, setDrafts] = useState<DraftContent[]>([]);
+
   // 防抖存儲到 localStorage
   const debouncedSave = useMemo(
     () => debounce((data: LocalStorageData) => {
@@ -597,6 +718,43 @@ export const useDraftStore = () => {
       return acc;
     }, {} as Record<Platform, DraftContent>);
   }, [drafts]);
+
+  // 內容生成邏輯
+  const generateContent = useCallback(async (request: GenerateRequest) => {
+    try {
+      // 調用 LangGraph 工作流
+      const result = await contentGenerationGraph.invoke({
+        originalContent: request.originalContent,
+        platforms: request.platforms,
+        globalSettings: request.globalSettings,
+        drafts: {},
+        errors: {}
+      });
+      
+      // 更新草稿狀態
+      const newDrafts = Object.entries(result.drafts).map(([platform, content]) => ({
+        id: generateId(),
+        platform: platform as Platform,
+        content,
+        hashtags: extractHashtags(content),
+        timestamp: Date.now(),
+        feedback: [],
+        settings: request.platformOverrides?.[platform as Platform] || {}
+      }));
+      
+      setDrafts(newDrafts);
+      debouncedSave({ drafts: newDrafts, globalSettings: request.globalSettings, lastUpdated: Date.now() });
+    } catch (error) {
+      console.error('Content generation failed:', error);
+    }
+  }, [debouncedSave]);
+
+  return {
+    drafts,
+    draftsByPlatform,
+    generateContent,
+    // ... 其他方法
+  };
 };
 ```
 
@@ -622,4 +780,46 @@ export class SecureStorage {
     // 解密 API Key
   }
 }
+```
+
+## LangGraph 工作流圖 / LangGraph Workflow Diagram
+
+```mermaid
+graph TD
+  subgraph "LangGraph 內容生成工作流"
+    A[START] --> B[validateInput]
+    B --> C[generatePlatformContent]
+    
+    subgraph "並行生成所有平台內容"
+      C1[X - Twitter 生成]
+      C2[LinkedIn 生成] 
+      C3[Instagram 生成]
+      C4[Threads 生成]
+      C5[Facebook 生成]
+    end
+    
+    C --> C1
+    C --> C2
+    C --> C3
+    C --> C4
+    C --> C5
+    
+    C1 --> D[waitForAllPlatforms]
+    C2 --> D
+    C3 --> D
+    C4 --> D
+    C5 --> D
+    
+    D --> E[validateOutput]
+    E --> F[formatResults]
+    F --> G[END]
+  end
+
+  subgraph "反饋重新生成工作流"
+    H[START] --> I[loadContext]
+    I --> J[applyFeedback]
+    J --> K[regenerateContent]
+    K --> L[validateResult]
+    L --> M[END]
+  end
 ```
