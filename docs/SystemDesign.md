@@ -71,33 +71,56 @@
 
 ## 資料模型 / Data Models
 
+### 常數定義
+
+```typescript
+// 平台枚舉 - constants/platforms.ts
+export const PLATFORMS = {
+  X: 'x',
+  LINKEDIN: 'linkedin',
+  INSTAGRAM: 'instagram',
+  THREADS: 'threads',
+  FACEBOOK: 'facebook'
+} as const;
+
+// 語調選項 - constants/settings.ts
+export const TONES = {
+  PROFESSIONAL: 'professional',
+  CASUAL: 'casual',
+  HUMOROUS: 'humorous'
+} as const;
+
+// 長度選項 - constants/settings.ts
+export const LENGTHS = {
+  SHORT: 'short',
+  MEDIUM: 'medium',
+  LONG: 'long'
+} as const;
+```
+
 ### TypeScript 接口定義
 
 ```typescript
-// 平台枚舉
-export enum Platform {
-  X = 'x', // 原 Twitter
-  LINKEDIN = 'linkedin', 
-  INSTAGRAM = 'instagram',
-  THREADS = 'threads',
-  FACEBOOK = 'facebook'
+// types/api.d.ts - API 相關類型
+export interface GenerateRequest {
+  originalContent: string;
+  platforms: Platform[];
+  globalSettings: GlobalSettings;
+  platformOverrides?: Record<Platform, Partial<PlatformSettings>>;
 }
 
-// 語調選項
-export enum Tone {
-  PROFESSIONAL = 'professional',
-  CASUAL = 'casual',
-  HUMOROUS = 'humorous'
+export interface ChatMessage {
+  id: string;
+  content: string;
+  timestamp: number;
+  isUser: boolean;
 }
 
-// 長度選項  
-export enum Length {
-  SHORT = 'short',
-  MEDIUM = 'medium', 
-  LONG = 'long'
-}
+// types/settings.d.ts - 設定相關類型
+export type Platform = typeof PLATFORMS[keyof typeof PLATFORMS];
+export type Tone = typeof TONES[keyof typeof TONES];
+export type Length = typeof LENGTHS[keyof typeof LENGTHS];
 
-// 全域設定
 export interface GlobalSettings {
   tone: Tone;
   length: Length;
@@ -107,7 +130,6 @@ export interface GlobalSettings {
   language: 'zh-TW' | 'en';
 }
 
-// 平台特定設定
 export interface PlatformSettings {
   platform: Platform;
   tone?: Tone;
@@ -115,7 +137,7 @@ export interface PlatformSettings {
   includeEmojis?: boolean;
 }
 
-// 草稿內容
+// types/content.d.ts - 內容相關類型
 export interface DraftContent {
   id: string;
   platform: Platform;
@@ -126,29 +148,19 @@ export interface DraftContent {
   settings: PlatformSettings;
 }
 
-// 聊天訊息
-export interface ChatMessage {
-  id: string;
-  content: string;
-  timestamp: number;
-  isUser: boolean;
-}
-
-// 生成請求
-export interface GenerateRequest {
-  originalContent: string;
-  platforms: Platform[];
-  globalSettings: GlobalSettings;
-  platformOverrides?: Record<Platform, Partial<PlatformSettings>>;
-}
-
-// localStorage 資料結構
+// types/storage.d.ts - 儲存相關類型
 export interface LocalStorageData {
   apiKey?: string;
   globalSettings: GlobalSettings;
   drafts: DraftContent[];
   lastUpdated: number;
 }
+
+// types/index.ts - 類型導出
+export type { Platform, Tone, Length, GlobalSettings, PlatformSettings } from './settings';
+export type { DraftContent } from './content';
+export type { GenerateRequest, ChatMessage } from './api';
+export type { LocalStorageData } from './storage';
 ```
 
 ## 系統架構圖 / System Architecture Diagram
@@ -489,6 +501,12 @@ d:\GitHub\social-media-post-assistant/
     │       ├── LocaleProvider.tsx
     │       └── DraftStoreProvider.tsx
     │
+    ├── constants/              # 常數定義
+    │   ├── index.ts            # 常數導出
+    │   ├── platforms.ts        # 平台相關常數
+    │   ├── generation.ts       # 生成相關常數
+    │   └── ui.ts               # UI 相關常數
+    │
     ├── hooks/
     │   ├── index.ts            # hooks 工具導出
     │   ├── useApiKey.ts        # API Key 管理
@@ -554,10 +572,138 @@ d:\GitHub\social-media-post-assistant/
     │   └── index.ts            # i18n 導出
     │
     └── types/
-        ├── index.ts            # 全域類型
-        ├── api.ts              # API 類型  
-        ├── storage.ts          # 存儲類型
+        ├── index.ts            # 類型導出
+        ├── api.d.ts            # API 相關類型
+        ├── settings.d.ts       # 設定相關類型
+        ├── content.d.ts        # 內容相關類型
+        ├── storage.d.ts        # 儲存相關類型
         └── next-intl.d.ts      # next-intl 類型增強
+```
+
+## 開發規範 / Development Standards
+
+### 1. 檔案命名與結構規範
+
+#### Index 檔案規範
+- 所有 `index.ts` 檔案僅用於導出 (export)，不進行任何宣告或實作
+- React 組件目錄使用 `index.tsx` 進行導出，因為可能包含 JSX 語法
+- 使用 barrel exports 統一導出模組內容
+- 按字母順序排列導出項目
+- 類型定義應在專門的 `.d.ts` 檔案中宣告，再透過 `index.ts` 導出
+
+```typescript
+// ✅ 正確示例 - lib/utils/index.ts (純邏輯導出)
+export { validateInput } from './validation';
+export { exportToCSV, exportToJSON } from './export';
+export { formatContent } from './formatting';
+
+// ✅ 正確示例 - components/ui/ApiKeyModal/index.tsx (React 組件導出)
+export { ApiKeyModal } from './ApiKeyModal';
+
+// ✅ 正確示例 - types/index.ts (類型導出)
+export type { Platform, Tone, Length } from './settings';
+export type { DraftContent } from './content';
+export type { GenerateRequest } from './api';
+
+// ❌ 錯誤示例 - 不應在 index.ts 中宣告
+export const DEFAULT_SETTINGS = { ... };
+export interface UserSettings { ... };
+```
+
+#### 類型定義規範
+- 類型定義檔案使用 `.d.ts` 尾綴
+- 類型定義檔案不應包含任何定值 (constants)
+- 純類型宣告，不包含實作邏輯
+
+```typescript
+// ✅ 正確示例 - types/index.d.ts
+export interface GlobalSettings {
+  tone: string;
+  length: string;
+  includeHashtags: boolean;
+}
+
+// ❌ 錯誤示例 - 不應在 .d.ts 中定義定值
+export const DEFAULT_TONE = 'professional';
+```
+
+#### 常數定義規範
+- 所有常數定義在 `constants/` 目錄
+- 使用大寫加底線命名 (UPPER_SNAKE_CASE)
+- 按功能模組分組
+
+```typescript
+// ✅ 正確示例 - constants/platforms.ts
+export const PLATFORM_LIMITS = {
+  X: 280,
+  LINKEDIN: 3000,
+  INSTAGRAM: 2200,
+  THREADS: 500,
+  FACEBOOK: 63206
+} as const;
+
+export const DEFAULT_GLOBAL_SETTINGS = {
+  TONE: 'professional',
+  LENGTH: 'medium',
+  INCLUDE_HASHTAGS: true,
+  INCLUDE_EMOJIS: true,
+  INCLUDE_CALL_TO_ACTION: false,
+  LANGUAGE: 'zh-TW'
+} as const;
+```
+
+### 2. 程式碼組織規範
+
+#### 導入順序
+1. Node 內建模組
+2. 第三方套件
+3. 內部模組 (使用 @/ 別名)
+4. 類型導入最後，並且使用 `import type` 來避免引入實作
+
+```typescript
+// ✅ 正確示例
+import { StateGraph, Annotation } from "@langchain/langgraph";
+
+import { geminiClient } from '@/lib/gemini/client';
+import { PLATFORM_LIMITS } from '@/constants/platforms';
+import type { GenerationState, Platform } from '@/types';
+```
+
+#### 路徑別名規範
+- 使用 `@/` 代表 `src/` 目錄
+- 優先使用別名路徑，避免相對路徑 `../`
+- 保持導入路徑一致性
+- 若模組有 `index.ts` 或 `index.tsx` 導出，應從模組目錄導入，不直接導入檔案
+- React 組件統一從組件目錄導入（通過 `index.tsx`）
+
+```typescript
+// ✅ 正確示例
+import { DEFAULT_LANGUAGE } from '@/i18n';
+import { DraftCard } from '@/components/ui/DraftCard'; // 從 DraftCard/index.tsx 導出
+import { useApiKey } from '@/hooks'; // 從 hooks/index.ts 導出
+import { PLATFORMS } from '@/constants'; // 從 constants/index.ts 導出
+
+// ❌ 錯誤示例
+import { DEFAULT_LANGUAGE } from '../../i18n';
+import { DraftCard } from '../ui/DraftCard/DraftCard'; // 不直接導入檔案
+import { useApiKey } from '../../hooks/useApiKey'; // 不直接導入檔案
+import { PLATFORMS } from '../../constants/platforms'; // 不直接導入檔案
+```
+
+#### 函數規範
+- 使用 camelCase
+- 動詞開頭，語義清晰
+- 避免縮寫
+- 禁止使用 `any` 類型
+
+```typescript
+// ✅ 正確示例
+export const generateXContent = async (state: GenerationState) => { ... };
+export const validateUserInput = (input: string) => { ... };
+
+// ❌ 錯誤示例
+export const genX = async (s: any) => { ... };
+export const validate = (i: string) => { ... };
 ```
 
 ## 實作細節 / Implementation Details
@@ -576,7 +722,7 @@ import {
   generateFacebookContent,
   validateOutput,
   formatResults
-} from './nodes';
+} from '@/lib/langchain/nodes';
 
 // 使用 Annotation 定義狀態結構
 export const GenerationState = Annotation.Root({

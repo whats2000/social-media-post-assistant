@@ -12,8 +12,11 @@
   "dependencies": {
     "@ant-design/icons": "^5.6.1",
     "@langchain/core": "^0.3.62",
+    "@langchain/google-genai": "^0.2.14",
     "@langchain/langgraph": "^0.3.6",
+    "@types/lodash-es": "^4.17.12",
     "antd": "^5.26.4",
+    "lodash-es": "^4.17.21",
     "next": "15.3.5",
     "next-intl": "^4.3.4",
     "react": "^18.3.1",
