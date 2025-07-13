@@ -117,9 +117,9 @@ export interface ChatMessage {
 }
 
 // types/settings.d.ts - 設定相關類型
-export type Platform = typeof PLATFORMS[keyof typeof PLATFORMS];
-export type Tone = typeof TONES[keyof typeof TONES];
-export type Length = typeof LENGTHS[keyof typeof LENGTHS];
+export type Platform = 'x' | 'linkedin' | 'instagram' | 'threads' | 'facebook';
+export type Tone = 'professional' | 'casual' | 'humorous';
+export type Length = 'short' | 'medium' | 'long';
 
 export interface GlobalSettings {
   tone: Tone;
@@ -337,16 +337,39 @@ Mobile (<768px):
 ### 色彩系統 (AntD Token + Tailwind)
 
 ```typescript
-// theme/tokens.ts
-export const themeTokens = {
-  colorPrimary: '#1677ff',     // 主品牌色
-  colorSuccess: '#52c41a',     // 成功狀態  
-  colorWarning: '#faad14',     // 警告狀態
-  colorError: '#ff4d4f',       // 錯誤狀態
-  colorBgContainer: '#ffffff', // 容器背景
-  colorBgElevated: '#fafafa',  // 提升背景
-  borderRadius: 8,             // 統一圓角
-  fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif'
+// constants/ui.ts - UI 相關常數
+export const THEME_TOKENS = {
+  COLOR_PRIMARY: '#1677ff',
+  COLOR_SUCCESS: '#52c41a',
+  COLOR_WARNING: '#faad14',
+  COLOR_ERROR: '#ff4d4f',
+  COLOR_BG_CONTAINER: '#ffffff',
+  COLOR_BG_ELEVATED: '#fafafa',
+  BORDER_RADIUS: 8,
+  FONT_FAMILY: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif'
+} as const;
+
+// 響應式斷點
+export const BREAKPOINTS = {
+  MOBILE: 768,
+  TABLET: 1200,
+  DESKTOP: 1200
+} as const;
+
+// theme/config.ts - 主題配置
+import { THEME_TOKENS } from '@/constants';
+
+export const themeConfig = {
+  token: {
+    colorPrimary: THEME_TOKENS.COLOR_PRIMARY,
+    colorSuccess: THEME_TOKENS.COLOR_SUCCESS,
+    colorWarning: THEME_TOKENS.COLOR_WARNING,
+    colorError: THEME_TOKENS.COLOR_ERROR,
+    colorBgContainer: THEME_TOKENS.COLOR_BG_CONTAINER,
+    colorBgElevated: THEME_TOKENS.COLOR_BG_ELEVATED,
+    borderRadius: THEME_TOKENS.BORDER_RADIUS,
+    fontFamily: THEME_TOKENS.FONT_FAMILY
+  }
 };
 
 // 對應 Tailwind classes
@@ -521,7 +544,7 @@ d:\GitHub\social-media-post-assistant/
     │   │   │   └── client.test.ts
     │   │   ├── index.ts        # Gemini API 導出
     │   │   ├── client.ts       # Gemini API 客戶端
-    │   │   └── types.ts        # API 類型定義
+    │   │   └── types.d.ts      # API 類型定義
     │   ├── langchain/
     │   │   ├── __tests__/      # Jest 功能測試
     │   │   │   ├── state.test.ts
@@ -565,11 +588,23 @@ d:\GitHub\social-media-post-assistant/
     │       ├── export.ts       # 匯出工具
     │       └── formatting.ts   # 格式化工具
     │
+    ├── theme/                  # 主題配置
+    │   ├── index.ts            # 主題導出
+    │   └── config.ts           # AntD 主題配置
+    │
     ├── i18n/
-    │   ├── locales/
-    │   │   ├── zh-TW.json
-    │   │   └── en.json
-    │   └── index.ts            # i18n 導出
+    │   ├── constants.ts        # 國際化常數
+    │   ├── index.ts            # i18n 導出
+    │   ├── navigation.ts       # 國際化導航
+    │   ├── request.ts          # 請求處理
+    │   ├── routing.ts          # 路由配置
+    │   ├── types.d.ts          # 國際化類型
+    │   ├── utils.ts            # 工具函數
+    │   └── locales/
+    │       ├── en/
+    │       │   └── Common.json
+    │       └── zh-TW/
+    │           └── Common.json
     │
     └── types/
         ├── index.ts            # 類型導出
@@ -664,8 +699,8 @@ export const DEFAULT_GLOBAL_SETTINGS = {
 // ✅ 正確示例
 import { StateGraph, Annotation } from "@langchain/langgraph";
 
-import { geminiClient } from '@/lib/gemini/client';
-import { PLATFORM_LIMITS } from '@/constants/platforms';
+import { geminiClient } from '@/lib/gemini';
+import { PLATFORM_LIMITS } from '@/constants';
 import type { GenerationState, Platform } from '@/types';
 ```
 
@@ -673,7 +708,7 @@ import type { GenerationState, Platform } from '@/types';
 - 使用 `@/` 代表 `src/` 目錄
 - 優先使用別名路徑，避免相對路徑 `../`
 - 保持導入路徑一致性
-- 若模組有 `index.ts` 或 `index.tsx` 導出，應從模組目錄導入，不直接導入檔案
+- **若模組有 `index.ts` 或 `index.tsx` 導出，只需導入模組目錄，不指定具體檔案**
 - React 組件統一從組件目錄導入（通過 `index.tsx`）
 
 ```typescript
@@ -685,9 +720,9 @@ import { PLATFORMS } from '@/constants'; // 從 constants/index.ts 導出
 
 // ❌ 錯誤示例
 import { DEFAULT_LANGUAGE } from '../../i18n';
-import { DraftCard } from '../ui/DraftCard/DraftCard'; // 不直接導入檔案
-import { useApiKey } from '../../hooks/useApiKey'; // 不直接導入檔案
-import { PLATFORMS } from '../../constants/platforms'; // 不直接導入檔案
+import { DraftCard } from '@/components/ui/DraftCard/DraftCard'; // 不應直接導入檔案，應使用 '@/components/ui/DraftCard'
+import { useApiKey } from '@/hooks/useApiKey'; // 不應直接導入檔案，應使用 '@/hooks'
+import { PLATFORMS } from '@/constants/platforms'; // 不應直接導入檔案，應使用 '@/constants'
 ```
 
 #### 函數規範
@@ -722,7 +757,7 @@ import {
   generateFacebookContent,
   validateOutput,
   formatResults
-} from '@/lib/langchain/nodes';
+} from '@/lib/langchain';
 
 // 使用 Annotation 定義狀態結構
 export const GenerationState = Annotation.Root({
@@ -739,7 +774,7 @@ export const GenerationState = Annotation.Root({
   }),
 });
 
-// 工作流圖建構 - 每個平台獨立節點
+// 工作流圖建構 - 每個平台獨立節點並行執行
 export const contentGenerationGraph = new StateGraph(GenerationState)
   .addNode("validateInput", validateInput)
   .addNode("generateX", generateXContent)
@@ -750,28 +785,34 @@ export const contentGenerationGraph = new StateGraph(GenerationState)
   .addNode("validateOutput", validateOutput)
   .addNode("formatResults", formatResults)
   .addEdge(START, "validateInput")
-  .addEdge("validateInput", "generateX")
-  .addEdge("validateInput", "generateLinkedIn")
-  .addEdge("validateInput", "generateInstagram")
-  .addEdge("validateInput", "generateThreads")
-  .addEdge("validateInput", "generateFacebook")
-  .addEdge("generateX", "validateOutput")
-  .addEdge("generateLinkedIn", "validateOutput")
-  .addEdge("generateInstagram", "validateOutput")
-  .addEdge("generateThreads", "validateOutput")
-  .addEdge("generateFacebook", "validateOutput")
+  .addConditionalEdges("validateInput", routeToPlatforms)
+  .addEdge(["generateX", "generateLinkedIn", "generateInstagram", "generateThreads", "generateFacebook"], "validateOutput")
   .addEdge("validateOutput", "formatResults")
   .addEdge("formatResults", END)
   .compile();
+
+// 路由函數 - 根據選擇的平台決定執行哪些節點
+function routeToPlatforms(state: typeof GenerationState.State) {
+  const routes: string[] = [];
+  
+  if (state.platforms.includes('x')) routes.push("generateX");
+  if (state.platforms.includes('linkedin')) routes.push("generateLinkedIn");
+  if (state.platforms.includes('instagram')) routes.push("generateInstagram");
+  if (state.platforms.includes('threads')) routes.push("generateThreads");
+  if (state.platforms.includes('facebook')) routes.push("generateFacebook");
+  
+  return routes;
+}
 ```
 
 ### 2. 節點檔案結構範例
 
 ```typescript
 // lib/langchain/nodes/generateX.ts
-import { geminiClient } from '../../gemini/client';
-import { GenerationState } from '../state';
-import { Platform } from '../../../types';
+import { geminiClient } from '@/lib/gemini';
+import { GenerationState } from '@/lib/langchain';
+import { PLATFORMS } from '@/constants';
+import type { Platform } from '@/types';
 
 const X_PROMPT = `
   作為社群媒體專家，請將以下內容改寫為適合 X (原 Twitter) 的貼文：
@@ -788,7 +829,7 @@ const X_PROMPT = `
 `;
 
 export const generateXContent = async (state: typeof GenerationState.State) => {
-  if (!state.platforms.includes(Platform.X)) return {};
+  if (!state.platforms.includes(PLATFORMS.X)) return {};
   
   try {
     const prompt = X_PROMPT
@@ -799,9 +840,9 @@ export const generateXContent = async (state: typeof GenerationState.State) => {
       .replace('{includeEmojis}', state.globalSettings.includeEmojis.toString());
       
     const response = await geminiClient.generateContent(prompt);
-    return { drafts: { [Platform.X]: response.text() } };
+    return { drafts: { [PLATFORMS.X]: response.text() } };
   } catch (error) {
-    return { errors: { [Platform.X]: error.message } };
+    return { errors: { [PLATFORMS.X]: error.message } };
   }
 };
 ```
@@ -927,11 +968,12 @@ graph TD
   subgraph "LangGraph 內容生成工作流"
     A[START] --> B[validateInput]
     
-    B --> C1[generateX]
-    B --> C2[generateLinkedIn]
-    B --> C3[generateInstagram]
-    B --> C4[generateThreads]
-    B --> C5[generateFacebook]
+    B --> C{routeToPlatforms}
+    C --> C1[generateX]
+    C --> C2[generateLinkedIn]
+    C --> C3[generateInstagram]
+    C --> C4[generateThreads]
+    C --> C5[generateFacebook]
     
     C1 --> D[validateOutput]
     C2 --> D
@@ -941,6 +983,13 @@ graph TD
     
     D --> E[formatResults]
     E --> F[END]
+    
+    style C fill:#e1f5fe
+    style C1 fill:#f3e5f5
+    style C2 fill:#f3e5f5
+    style C3 fill:#f3e5f5
+    style C4 fill:#f3e5f5
+    style C5 fill:#f3e5f5
   end
 
   subgraph "反饋重新生成工作流"
@@ -951,3 +1000,8 @@ graph TD
     L --> M[END]
   end
 ```
+
+**說明：**
+- `routeToPlatforms` 根據用戶選擇的平台動態決定執行哪些生成節點
+- 各平台生成節點 (C1-C5) 並行執行，提高效率
+- 所有生成完成後統一進入 `validateOutput` 進行驗證
